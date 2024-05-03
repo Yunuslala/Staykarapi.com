@@ -7,9 +7,9 @@ const { upload } = require("../utils/multer");
 
 const { AddBlogFavourites, AddHotelFavourites, ProfileDetails } = require("../controllers/UserProfile.Controller");
 
-ProfileRouter.route("/User/ProfileDetails").get(Authentication,ProfileDetails);
-ProfileRouter.route("/User/AddToFavouriteBlog/:id").patch(Authentication,AddBlogFavourites);
-ProfileRouter.route("/User/AddToFavouriteHotels/:id").patch(Authentication,AddHotelFavourites);
+ProfileRouter.route("/User/ProfileDetails").post(ProfileDetails);
+ProfileRouter.route("/User/AddToFavouriteBlog/:id").post(AddBlogFavourites);
+ProfileRouter.route("/User/AddToFavouriteHotels/:id").post(AddHotelFavourites);
 
 
 

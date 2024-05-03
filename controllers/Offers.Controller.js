@@ -4,7 +4,15 @@ const { OfferModel } = require("../models/Offer.model");
 const { ErrorHandler } = require("../utils/Error.Handler");
 const { generateRandomString, generateRandomNumber } = require("../utils/RandomNumber");
 
-
+exports.GetSingleOffer=AsyncerrorHandler(async(req,res,next)=>{
+    const offerId=req.params.id
+    const findOffer=await OfferModel.findOne({_id:offerId}).populate('Hotel.HotelId');
+   
+    if(!findOffer){
+     return next(new ErrorHandler(404,"Offer is empty does not exist"))
+    }
+     return res.status(200).send({success:true,msg:"Offer of Hotel dispersed",data:findOffer})
+   })
 
 exports.AddOffer=AsyncerrorHandler(async(req,res,next)=>{
    const {role,UserId,discount}=req.body;

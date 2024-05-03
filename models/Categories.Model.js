@@ -1,5 +1,4 @@
 const  mongoose=require('mongoose');
-const validator = require('validator');
 const CategorySchema=mongoose.Schema({
     text:{
         type:String,
@@ -9,21 +8,9 @@ const CategorySchema=mongoose.Schema({
         type:Number
 
     },
-    CategoryImages:{
-      imageUrl: {
-        type: String,
-      },
-      Key: {
-        type: String,
-      },
-
-    },
     description:{
         type:String,
     },
-    type:{
-      type:String,
-  },
       createdAt: {
         type: Date,
         default: Date.now,

@@ -7,8 +7,8 @@ const { ErrorHandler } = require("../utils/Error.Handler");
 
 
 exports.ProfileDetails = AsyncerrorHandler(async (req, res, next) => {
-  const { UserId } = req.body;
-  const userProfile = await ProfileModel.findOne({ UserId })
+  const { email } = req.body;
+  const userProfile = await ProfileModel.findOne({email })
   .populate("FavouriteBlogs.blogId")
   .populate("FavouriteHotels.HotelId")
   .populate({

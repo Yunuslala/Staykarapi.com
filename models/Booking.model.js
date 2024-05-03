@@ -6,6 +6,7 @@ const BookingSchema=mongoose.Schema({
         type:mongoose.Types.ObjectId,
         ref:'user'
     },
+   
     HotelId:{
         type:mongoose.Types.ObjectId,
         ref:'Hotel'

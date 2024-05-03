@@ -14,7 +14,7 @@ exports.RegisterUser=AsyncErrorHandler(async(req,res,next)=>{
     const  {name,email,password,phoneNumber,role}=req.body;
     const findExisting=await UserModel.findOne({email});
     if(findExisting){
-        return next(new ErrorHandler(400,"User already exist go for login"))
+        return res.status(200).send({success:true,msg:"User already exist go for login",data:findExisting})
     }
     const hash=await bcrypt.hash(password,10);
     const saveUser=new UserModel({
@@ -241,8 +241,8 @@ exports.deleteUser=AsyncErrorHandler(async(req,res,next)=>{
 
 
 exports.MyProfile=AsyncErrorHandler(async(req,res,next)=>{
-    const {UserId}=req.body;
-    const GetMe=await UserModel.findOne({_id:UserId});
+    const {email}=req.body;
+    const GetMe=await UserModel.findOne({email});
     if(!GetMe){
         return next(new ErrorHandler(404,"user does not exist"))
     }

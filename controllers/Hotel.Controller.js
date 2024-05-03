@@ -168,18 +168,142 @@ exports.AddExtraRooms = AsyncerrorHandler(async (req, res, next) => {
     });
 });
 
-exports.GetAllHotel = AsyncerrorHandler(async (req, res, next) => {
-  const AllHotel = await HotelModel.find()
-    .populate("hotelRooms.roomsId")
-    .populate("Categories.CategoryId")
-    .populate('Reviews.ReviewId')
-    .populate('LocationId')
-    .populate('Ameneties.amenityId')
-  if (!AllHotel.length) {
-    return next(new ErrorHandler(404,"Hotels does not exist"))
+exports.GetAllHotel = async (req, res, next) => {
+  const { locations, amenities, sort } = req.query;
+  
+  try {
+    let filterCriteria = {};
+
+    if (locations!=undefined && locations.length > 0) {
+      const locationIds = await getLocationIds(locations);
+      filterCriteria['LocationId'] = { $in: locationIds };
+    }
+
+ 
+    if (amenities!=undefined && amenities.length > 0) {
+      const amenityIds = await getAmenityIds(amenities);
+      filterCriteria['Ameneties.amenityId'] = { $in: amenityIds };
+    }
+
+
+    // Construct the query to fetch hotels
+    let query = HotelModel.find(filterCriteria)
+      .populate("hotelRooms.roomsId")
+      .populate("Categories.CategoryId")
+      .populate('Reviews.ReviewId')
+      .populate('LocationId')
+      .populate('Ameneties.amenityId')
+      .populate('offers.offerId');
+
+    // If sorting parameter is provided
+    if (sort!=undefined) {
+      console.log("objectofsort",sort);
+      switch (sort) {
+        case 'priceAsc':
+          query = query.sort({ 'hotelRooms.roomsId.Price': 1 });
+          break;
+        case 'priceDesc':
+          query = query.sort({ 'hotelRooms.roomsId.Price': -1 });
+          break;
+        case 'ratingAsc':
+          query = query.sort({ 'Ratings': 1 });
+          break;
+        case 'ratingDesc':
+          query = query.sort({ 'Ratings': -1 });
+          break;
+        // Add more conditions for other sorting parameters if needed
+        default:
+          // Handle invalid sorting parameter
+          return res.status(400).json({ success: false, msg: "Invalid sorting parameter" });
+      }
+    }
+
+    const AllHotel = await query;
+
+    if (!AllHotel.length) {
+      return res.status(404).json({ success: false, msg: "Hotels do not exist" });
+    }
+
+    let highestPrice = 0;
+    let lowestPrice = Infinity;
+
+    // Calculate highest and lowest prices
+    AllHotel.forEach(hotel => {
+      hotel.hotelRooms.forEach(item => {
+        if (item.roomsId.Price < highestPrice) {
+          highestPrice = item.roomsId.Price;
+        }
+        if (item.roomsId.Price > lowestPrice) {
+          lowestPrice = item.roomsId.Price;
+        }
+      });
+    });
+
+    const hoteldata = {
+      data: AllHotel,
+      lowestPrice,
+      highestPrice,
+      hotelLength: AllHotel.length
+    };
+
+    return res.status(200).json({ success: true, msg: "All hotels", data: hoteldata });
+  } catch (error) {
+    return next(error);
   }
-  return res.status(200).send({success:true,msg:"All hotels",data:AllHotel})
-});
+};
+
+exports.searchHotel = async (req, res, next) => {
+  try {
+    const { location, from, to, persons, rooms } = req.body;
+
+    // Search hotels based on location
+    const locations = await LocationsModel.find({ 'location': location });
+    const hotels=await HotelModel.find({LocationId:locations?._id});
+    if(!hotels.length){
+      return next(new ErrorHandler(404,"hotels Does not exist for this locations"))
+    }
+    // Filter hotels based on availability of rooms
+    const availableHotels = await Promise.all(hotels.map(async (hotel) => {
+      const availableRooms = await RoomModel.find({
+        'hotelId': hotel._id,
+        'isAvailable': true,
+      });
+
+      const filteredRooms = availableRooms.filter(room => {
+        // Check if room capacity is enough for persons
+        if (persons <= 3) {
+          return room.Capacity >= persons;
+        } else {
+          // If persons > 3, check if the room quantity is sufficient
+          const requiredRooms = Math.ceil(persons / 3); // Calculate required number of rooms
+          return room.roomsQuantity >= requiredRooms;
+        }
+      });
+
+      return { hotel, filteredRooms };
+    }));
+
+    // Filter hotels based on required number of rooms
+    const filteredHotels = availableHotels.filter(({ availableRooms }) => availableRooms >= rooms);
+
+   return  res.status(200).send({success:true,data: filteredHotels });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to find location IDs
+async function getLocationIds(locations) {
+  const locationIds = await LocationsModel.find({ location: { $in: locations } }).distinct('_id');
+  return locationIds;
+}
+
+// Helper function to find amenity IDs
+async function getAmenityIds(amenities) {
+  const amenityIds = await AmenetiesModel.find({ text: { $in: amenities } }).distinct('_id');
+  return amenityIds;
+}
+
 
 exports.addReview=AsyncerrorHandler(async(req,res,next)=>{
     const {UserId,HotelId,text,ratings}=req.body;
@@ -223,21 +347,41 @@ exports.addReview=AsyncerrorHandler(async(req,res,next)=>{
       return res.status(201).send({success:true,msg:"Review has been added",data:findHotel})
 })
 
-exports.getSingleHotel=AsyncerrorHandler(async(req,res,next)=>{
-  const Hotelname=req.params.id;
-  console.log(Hotelname)
-  const AllReviews=await HotelModel.findOne({Hotelname})
-  .populate("hotelRooms.roomsId")
-  .populate("Categories.CategoryId")
-  .populate('Reviews.ReviewId')
-  .populate('LocationId')
-  .populate('Ameneties.amenityId');
-  console.log(AllReviews);
-  if(!AllReviews){
-    return next(new ErrorHandler(404,"Reviews does not exist for this hotel"))
+exports.getSingleHotel = AsyncerrorHandler(async (req, res, next) => {
+  const Hotelname = req.params.id;
+  const roomtype = req.query.type;
+  
+  try {
+    const singleHotel = await HotelModel.findOne({ Hotelname })
+      .populate('hotelRooms.roomsId')
+      .populate('Categories.CategoryId')
+      .populate('Reviews.ReviewId')
+      .populate('LocationId')
+      .populate('offers.offerId')
+      .populate('Ameneties.amenityId')
+      .exec();
+
+    if (!singleHotel) {
+      return next(new ErrorHandler(404, "Hotel not found"));
+    }
+
+    // Filter rooms by roomtype if specified
+    if (roomtype) {
+      singleHotel.hotelRooms = singleHotel.hotelRooms.filter(room => room.roomsId.roomsType === roomtype);
+    }
+
+    res.status(200).json({
+      success: true,
+      msg: "Single Hotel details",
+      data: singleHotel,
+    });
+  } catch (error) {
+    return next(new ErrorHandler(500, "Internal Server Error"));
   }
-  return res.status(200).send({success:true,msg:"Single Hotel details",data:AllReviews});
-})
+});
+
+
+
 
 exports.DeleteSingleHotel=AsyncerrorHandler(async(req,res,next)=>{
   const Hotelname=req.params.id;

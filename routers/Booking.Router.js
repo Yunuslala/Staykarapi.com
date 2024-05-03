@@ -5,12 +5,12 @@ const {InitiateBookings,ApplyOffer,verifyUserDuringpayment,ConfirmBooking,paymen
 
 
 
-BookingRouter.route("/User/InitiateBooking").post(Authentication,InitiateBookings);
-BookingRouter.route("/User/ApplyOffer").post(Authentication,ApplyOffer);
-BookingRouter.route("/User/VerifyUserDuringPayment").post(Authentication,verifyUserDuringpayment);
-BookingRouter.route("/User/ConfirmBooking").post(Authentication,ConfirmBooking);
-BookingRouter.route("/User/paymentVerify").post(Authentication,paymentVerify);
-BookingRouter.route("/User/GetCalcualteFinalPrice").post(Authentication,GetCalcualteFinalPrice);
+BookingRouter.route("/User/InitiateBooking").post(InitiateBookings);
+BookingRouter.route("/User/ApplyOffer").post(ApplyOffer);
+BookingRouter.route("/User/VerifyUserDuringPayment").post(verifyUserDuringpayment);
+BookingRouter.route("/User/ConfirmBooking").post(ConfirmBooking);
+BookingRouter.route("/User/paymentVerify").post(paymentVerify);
+BookingRouter.route("/User/GetCalcualteFinalPrice").post(GetCalcualteFinalPrice);
 
 
 

@@ -35,16 +35,17 @@ require('dotenv').config();
 const SendOTPmail = async (userDetail,random, res) => {
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp-mail.outlook.com",
-      port: 587,
-      auth: {
-        user: "staykr1@outlook.com",
-        pass: "Time@123!@#",
-      },
-    });
+      host: process.env.SMPT_HOST,
+    port: process.env.SMPT_PORT,
+    service: process.env.SMPT_SERVICE,
+    auth: {
+      user: process.env.SMPT_MAIL,
+      pass: process.env.SMPT_PASSWORD,
+    },
+  });
     // console.log(transporter)
     const mailOptions = {
-      from: "staykr1@outlook.com",
+      from: "staykr990@gmail.com",
       to: userDetail.email,
       subject: `Sent OTP for verification`,
       html: `<html><head><title>Welcome to StayKr</title></head><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);"><div style="text-align: center; margin-bottom: 20px;"><img src="https://staykr.com/static/media/Union.7389e099.png" alt="StayKr Logo" style="width: 150px;"></div><p style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">Hi <strong>${userDetail.name}</strong>,</p><p>Welcome to StayKr! Otp for verifications. :</p><div style="margin-bottom: 20px;"><p><strong>Email:</strong> ${userDetail.email}</p><p><strong>OTP:</strong> ${random}</p></div><div style="text-align: center; margin-top: 30px;"><a href="http://localhost:3000/admin_login" style="color: #fff; background-color: #007bff; padding: 10px 20px; text-decoration: none; border-radius: 5px; transition: background-color 0.3s;">Click here to log in</a></div><p>We recommend changing your password after logging in for the first time. If you have any questions or need assistance, please don't hesitate to contact our support team.</p></div><div style="margin-top: 30px; text-align: center; color: #777;"><p>Best regards,<br>The StayKr Team</p></div></body></html>`,
@@ -132,15 +133,16 @@ const sendPaymentSuccessEmail=async(Booking,res)=>{
     console.log("Recipient email:", details?.email);
    
     const transporter = nodemailer.createTransport({
-      host: "smtp-mail.outlook.com",
-      port: 587,
+      host: process.env.SMPT_HOST,
+      port: process.env.SMPT_PORT,
+      service: process.env.SMPT_SERVICE,
       auth: {
-        user: config.USERMAIL,
-        pass: config.USERPASS,
+        user: process.env.SMPT_MAIL,
+        pass: process.env.SMPT_PASSWORD,
       },
     });
     const mailOptions = {
-      from: 'staykr1@outlook.com',
+      from: 'staykr990@gmail.com',
       to: details?.UserId?.email,
       subject: "Booking Confirmation and Invoice",
       html: `<html lang="en">
@@ -239,7 +241,7 @@ const sendPaymentSuccessEmail=async(Booking,res)=>{
       ],
     };
     const AdminmailOptions = {
-      from: 'staykr1@outlook.com',
+      from: 'staykr990@gmail.com',
       to: 'staykr990@gmail.com',
       subject: "Booking Confirmation and Invoice",
       html: `<html lang="en">
@@ -353,7 +355,7 @@ const sendPaymentSuccessEmail=async(Booking,res)=>{
     console.log("paystatus",payStatus)
     if(details?.paymentId?.paymentMode==='Online Payment'){
       const stringRepresentation = details?.UserId?._id.toString();
-      return res.redirect(`http://localhost:3000/Profile/${ stringRepresentation}`)
+      return res.redirect(`http://localhost:3000/ProfileInformation?User=${ stringRepresentation}`)
     }else{
       return res.status(200).send({success:true,msg:"booking is done PDF sent to your email successfully"});
     }

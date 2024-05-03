@@ -8,7 +8,7 @@ UserRouter.route("/User/login").post(loginUser);
 UserRouter.route("/User/update-password").patch(Authentication,updatePassword);
 UserRouter.route("/User/update-profile").patch(upload.single('profile'),Authentication,updateProfile);
 UserRouter.route("/User/Alluser").get(Authentication,getAllUser);
-UserRouter.route("/User/profile").get(Authentication,MyProfile);
+UserRouter.route("/User/profile").post(MyProfile);
 UserRouter.route("/User/SingleUser/:id").get(Authentication,getSingleUser);
 UserRouter.route("/User/update-role/:id").patch(Authentication,updateUserRole);
 UserRouter.route("/User/deleteUser/:id").delete(Authentication,deleteUser);

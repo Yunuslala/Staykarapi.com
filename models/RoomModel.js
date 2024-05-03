@@ -13,7 +13,7 @@ const RoomSchema=mongoose.Schema({
         type:String,
         default:'deluxe',
         unique:true,
-        enum:['deluxe','large,small']
+        enum:['deluxe','suite','standard']
       },
       Price: {
         type: Number

@@ -6,43 +6,29 @@ const { ErrorHandler } = require("../utils/Error.Handler");
 const { UserModel } = require("../models/User.model");
 const env =require( "../config/env");
 const { PaymentModel} =require("../models/Payment.Model");
-const { generateRandomNumber} =require("../utils/RandomNumber");
+const { generateRandomNumber, generateRandomString} =require("../utils/RandomNumber");
 const { SendOTPmail, sendPaymentSuccessEmail} =require("../utils/SentMail");
 
 exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
   const {
-    HotelId,
-    roomsId,
     basePrice,
     numberOfGuests,
     numberOfRooms,
     checkInDate,
     checkOutDate,
-    role,
-    UserId,
   } = req.body;
-  const { totalPrice, gstAmount, finalPrice } = CalculatePrice(
+  console.log("body",req.body)
+  const priceDetails=await CalculatePrice(
     basePrice,
     numberOfGuests,
     numberOfRooms,
     checkInDate,
     checkOutDate
   );
-  const createBookings = new BookingModel({
-    HotelId,
-    roomsId,
-    gstAmount,
-    finalPrice,
-    totalPrice,
-    numberOfGuests,
-    numberOfRooms,
-    StartingDate: checkInDate,
-    EndDate: checkOutDate,
-  });
-  await createBookings.save();
+  console.log("dates",priceDetails);
   return res
     .status(200)
-    .send({ success: true, msg: "Booking is created", data: createBookings });
+    .send({ success: true, msg: "Calculated money",data:priceDetails });
 });
 exports.GetCalcualteFinalPrice = AsyncerrorHandler(async (req, res, next) => {
   const {
@@ -78,32 +64,36 @@ exports.GetCalcualteFinalPrice = AsyncerrorHandler(async (req, res, next) => {
     .status(200)
     .send({ success: true, msg: "Price is updated", data: updateData });
 });
-
-
 const CalculatePrice = async (
   basePrice,
-  numberOfRooms,
   numberOfGuests,
+  numberOfRooms,
   checkInDate,
   checkOutDate,
-  OfferId
+  OfferId,
+  perPersonCapacity,
+  priceIncreasePercentage // New parameter for dynamic base price hike percentage
 ) => {
-  const guestPriceMultiplier = 0.3; // 30% increase for each additional guest
-  const gstRate = 0.1; // 10% GST rate
+  const gstRate = 0.12; // 12% GST rate
   const perNightPrice = basePrice;
-  const fixedGuestsPerRoom = 2;
+  const priceIncreaseDefault = priceIncreasePercentage || 0.3;
+  const fixedGuestsPerRoom = perPersonCapacity || 2; // Default per person capacity for room
   const numberOfNights = Math.ceil(
     (new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24)
   );
+  const totalCapacity = fixedGuestsPerRoom * numberOfRooms;
   let totalPrice = perNightPrice * numberOfNights * numberOfRooms;
-  if (numberOfGuests > fixedGuestsPerRoom * numberOfRooms) {
-    const additionalGuests =
-      numberOfGuests - fixedGuestsPerRoom * numberOfRooms;
-    const additionalAmount =
-      perNightPrice * numberOfNights * guestPriceMultiplier * additionalGuests;
-    totalPrice += additionalAmount;
-  }
-  const gstAmount = totalPrice * gstRate;
+  
+ if (numberOfGuests > totalCapacity) {
+  const additionalGuests = numberOfGuests - totalCapacity;
+  console.log("additionalGuests", additionalGuests);
+  const additionalRoomsNeeded = Math.ceil(additionalGuests / fixedGuestsPerRoom);
+  console.log("additionalRoomsNeeded", additionalRoomsNeeded);
+  const basePriceHike = basePrice * priceIncreaseDefault * additionalRoomsNeeded;
+  console.log("basePriceHike", basePriceHike);
+  totalPrice += basePriceHike; // Corrected line: Apply the hike only once
+}
+  const gstAmount = totalPrice * gstRate ;
   let finalPrice = totalPrice + gstAmount;
   let offerDiscountMoney;
   const getOffer = await OfferModel.findOne({
@@ -116,15 +106,19 @@ const CalculatePrice = async (
     offerDiscountMoney = offerDiscount;
     finalPrice = finalPrice - offerDiscount;
   }
-
   const priceDetails = {
     totalPrice,
     finalPrice,
     gstAmount,
     offerDiscountMoney,
   };
+  console.log("priceDetails", priceDetails);
   return priceDetails;
 };
+
+
+
+
 
 exports.ApplyOffer = AsyncerrorHandler(async (req, res, next) => {
   const { BookingId, OfferId } = req.body;
@@ -175,7 +169,12 @@ exports.ApplyOffer = AsyncerrorHandler(async (req, res, next) => {
 });
 
 exports.verifyUserDuringpayment = AsyncerrorHandler(async (req, res, next) => {
-  const { name, email, phoneNumber, password } = req.body;
+  const { name, email, phoneNumber } = req.body;
+  const findUser=await UserModel.findOne({email});
+  if(findUser){
+    return res.status(200).send({"msg":"User is already present",data:findUser})
+  }
+  const password=generateRandomString(6);
   const registeredUser = new UserModel(name, email, password, phoneNumber);
   await registeredUser.save();
   const random = generateRandomNumber(4);
@@ -183,28 +182,25 @@ exports.verifyUserDuringpayment = AsyncerrorHandler(async (req, res, next) => {
 });
 
 exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
-  const { BookingId, method, UserId } = req.body;
+  const {  method, UserId,HotelId,roomsId,gstAmount,totalPrice,StartingDate,EndDate,appliedOfferId,finalPrice,basePrice,numberOfGuests,numberOfRooms,offerDiscountMoney } = req.body;
   const findUser = await UserModel.findOne({ _id: UserId });
   if (!findUser) {
     return next(new ErrorHandler(401, "Verify yourself for booking"));
   }
-  const findBooking = await BookingModel.findOne({
-    _id: BookingId,
-    isBooked: false,
-  });
-  if (!findBooking) {
-    return next(
-      new ErrorHandler(404, "booking Id is not valid or already booked")
-    );
-  }
+  const numberOfNights = Math.ceil(
+    (new Date(EndDate) - new Date(StartingDate)) / (1000 * 60 * 60 * 24)
+  );
+  const InitiateBooking=new BookingModel({duration:numberOfNights,UserId,HotelId,roomsId,gstAmount,totalPrice,StartingDate,EndDate,appliedOfferId,finalPrice,basePrice,numberOfGuests,numberOfRooms,offerDiscountMoney})
+ InitiateBooking.save();
+ 
   if (method == "Cash On site") {
     const confirmThePayment = new PaymentModel({
-      BookingId,
+      BookingId:InitiateBooking._id,
       paymentMode: method,
     });
     await confirmThePayment.save();
     const createBooking = await BookingModel.findByIdAndUpdate(
-      { _id: BookingId },
+      { _id: InitiateBooking?._id },
       {
         isBooked: true,
         UserId,
@@ -214,13 +210,14 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
       { new: true }
     );
     await sendPaymentSuccessEmail(createBooking, res);
-  } else {
+  }
+   else {
     const instance = new razorpay({
       key_id: env.RAZOR_PAY_KEY_ID,
       key_secret: env.RAZOR_PAY_KEY_SECRATE,
     });
     const options = {
-      amount: Number(findBooking?.totalPrice) * 100,
+      amount: Number(InitiateBooking?.totalPrice) * 100,
       currency: "INR",
       receipt: "rcp1",
     };
@@ -231,7 +228,7 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
       }
       try {
         const InitiatePayment = new PaymentModel({
-          BookingId,
+          BookingId:InitiateBooking?._id,
           paymentMode: method,
           razorpay_order_id: order.id,
         });
@@ -241,6 +238,7 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
         return res.status(200).send({
           msg: "Rozer Payment Initiated successfully",
           order,
+          bookingId:InitiateBooking?._id,
           key: config.RAZOR_PAY_KEY_ID,
         });
       } catch (error) {

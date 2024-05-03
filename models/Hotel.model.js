@@ -108,7 +108,8 @@ const HotelSchema = mongoose.Schema({
   offers: [
     {
       offerId: {
-        type: String,
+        type: mongoose.Types.ObjectId,
+        ref: "Offer",
       },
     },
   ],
