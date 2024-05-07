@@ -7,7 +7,7 @@ const { ErrorHandler } = require("../utils/Error.Handler");
 const { uploadMedia } = require("../utils/s3Config");
 
 exports.AddRooms = AsyncerrorHandler(async (req, res, next) => {
-  const { Capacity, roomsType, Price, role } = req.body;
+  const { Capacity, roomsType, Price, role,roomsQuantity } = req.body;
   if (role != "admin") {
     return next(new ErrorHandler(400, "You are not authorized for this route"));
   }
@@ -27,11 +27,12 @@ exports.AddRooms = AsyncerrorHandler(async (req, res, next) => {
     fileUrls = uploadedFiles.filter(Boolean);
   }
 
-  const CreateRoom = new RoomModel({
+  const CreateRoom =new RoomModel({
     Capacity,
     roomsType,
     Price,
     roomImages: fileUrls,
+    roomsQuantity
   });
   await CreateRoom.save();
   return res.status(201).send({
@@ -65,7 +66,8 @@ exports.RegisteredHotel = AsyncerrorHandler(async (req, res, next) => {
   Ameneties.map((item)=>amenetyObj.push({amenityId:item}));
   const categryObj=[];
   Categories.map((item)=>categryObj.push({CategoryId:item}));
- 
+ const roomobj=[];
+ hotelRooms.map((item)=>roomobj.push({roomsId:item}))
   if (role != "admin") {
     return next(new ErrorHandler(400, "You are not authorized for this route"));
   }
@@ -94,19 +96,18 @@ exports.RegisteredHotel = AsyncerrorHandler(async (req, res, next) => {
     phoneNumber,
     Categories:categryObj,
     Ameneties:amenetyObj,
-    hotelRooms,
+    hotelRooms:roomobj,
     LocationId,
     hotelImgaes: fileUrls,
   });
   await hotelsave.save();
-  const roomsave=new RoomModel({hotelId:hotelsave._id});
-  await roomsave.save()
-  // await RoomModel.findByIdAndUpdate(
-  //   { _id: hotelRooms },
-  //   {
-  //     hotelId: hotelsave._id,
-  //   }
-  // );
+  
+  await RoomModel.findByIdAndUpdate(
+    { _id: hotelRooms },
+    {
+      hotelId: hotelsave._id,
+    }
+  );
   return res.status(201).send({
     success: true,
     msg: "Hotel has been added",
@@ -226,18 +227,19 @@ exports.GetAllHotel = async (req, res, next) => {
 
     let highestPrice = 0;
     let lowestPrice = Infinity;
-
+    console.log("allhotels",AllHotel[0].hotelRooms);
     // Calculate highest and lowest prices
     AllHotel.forEach(hotel => {
       hotel.hotelRooms.forEach(item => {
-        if (item.roomsId.Price < highestPrice) {
+        if (item.roomsId.Price > highestPrice) {
           highestPrice = item.roomsId.Price;
         }
-        if (item.roomsId.Price > lowestPrice) {
+        if (item.roomsId.Price < lowestPrice) {
           lowestPrice = item.roomsId.Price;
         }
       });
     });
+    console.log("highestprice",highestPrice,lowestPrice);
 
     const hoteldata = {
       data: AllHotel,
@@ -245,7 +247,6 @@ exports.GetAllHotel = async (req, res, next) => {
       highestPrice,
       hotelLength: AllHotel.length
     };
-
     return res.status(200).json({ success: true, msg: "All hotels", data: hoteldata });
   } catch (error) {
     return next(error);
@@ -366,11 +367,26 @@ exports.getSingleHotel = AsyncerrorHandler(async (req, res, next) => {
     }
 
     // Filter rooms by roomtype if specified
+    console.log("roomtype",roomtype);
     if (roomtype) {
-      singleHotel.hotelRooms = singleHotel.hotelRooms.filter(room => room.roomsId.roomsType === roomtype);
-    }
+      // Filter rooms by roomtype if specified
+    console.log("roomtypeagain",roomtype);
 
-    res.status(200).json({
+      singleHotel.hotelRooms = singleHotel.hotelRooms.filter((room) => {
+        return room.roomsId.roomsType === roomtype;
+      });
+    
+      // Check if there are no rooms matching the specified type
+      if (singleHotel.hotelRooms.length === 0) {
+        singleHotel.hotelRooms = []; // Set hotelRooms to an empty array
+      }
+    }else{
+      singleHotel.hotelRooms = []; 
+    }
+    
+    
+
+   return res.status(200).json({
       success: true,
       msg: "Single Hotel details",
       data: singleHotel,
