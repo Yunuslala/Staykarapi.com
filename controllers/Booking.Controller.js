@@ -4,10 +4,18 @@ const { BookingModel } = require("../models/Booking.model");
 const { OfferModel } = require("../models/Offer.model");
 const { ErrorHandler } = require("../utils/Error.Handler");
 const { UserModel } = require("../models/User.model");
-const env =require( "../config/env");
-const { PaymentModel} =require("../models/Payment.Model");
-const { generateRandomNumber, generateRandomString} =require("../utils/RandomNumber");
-const { SendOTPmail, sendPaymentSuccessEmail} =require("../utils/SentMail");
+const env = require("../config/env");
+const crypto = require('crypto');
+const { PaymentModel } = require("../models/Payment.Model");
+const { generateRandomNumber, generateRandomString } = require("../utils/RandomNumber");
+const { SendOTPmail, sendPaymentSuccessEmail } = require("../utils/SentMail");
+const razorpay = require("razorpay");
+const { error } = require("console");
+const { ProfileModel } = require("../models/Profile.Model");
+const moment = require("moment-timezone");
+const bcrypt=require("bcrypt");
+const { RoomModel } = require("../models/RoomModel");
+
 
 exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
   const {
@@ -17,18 +25,18 @@ exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
     checkInDate,
     checkOutDate,
   } = req.body;
-  console.log("body",req.body)
-  const priceDetails=await CalculatePrice(
+  console.log("body", req.body)
+  const priceDetails = await CalculatePrice(
     basePrice,
     numberOfGuests,
     numberOfRooms,
     checkInDate,
     checkOutDate
   );
-  console.log("dates",priceDetails);
+  console.log("dates", priceDetails);
   return res
     .status(200)
-    .send({ success: true, msg: "Calculated money",data:priceDetails });
+    .send({ success: true, msg: "Calculated money", data: priceDetails });
 });
 exports.GetCalcualteFinalPrice = AsyncerrorHandler(async (req, res, next) => {
   const {
@@ -64,6 +72,7 @@ exports.GetCalcualteFinalPrice = AsyncerrorHandler(async (req, res, next) => {
     .status(200)
     .send({ success: true, msg: "Price is updated", data: updateData });
 });
+
 const CalculatePrice = async (
   basePrice,
   numberOfGuests,
@@ -83,17 +92,17 @@ const CalculatePrice = async (
   );
   const totalCapacity = fixedGuestsPerRoom * numberOfRooms;
   let totalPrice = perNightPrice * numberOfNights * numberOfRooms;
-  
- if (numberOfGuests > totalCapacity) {
-  const additionalGuests = numberOfGuests - totalCapacity;
-  console.log("additionalGuests", additionalGuests);
-  const additionalRoomsNeeded = Math.ceil(additionalGuests / fixedGuestsPerRoom);
-  console.log("additionalRoomsNeeded", additionalRoomsNeeded);
-  const basePriceHike = basePrice * priceIncreaseDefault * additionalRoomsNeeded;
-  console.log("basePriceHike", basePriceHike);
-  totalPrice += basePriceHike; // Corrected line: Apply the hike only once
-}
-  const gstAmount = totalPrice * gstRate ;
+  let priceHike = 0;
+  if (numberOfGuests > totalCapacity) {
+    const additionalGuests = numberOfGuests - totalCapacity;
+    console.log("additionalGuests", additionalGuests);
+    const additionalRoomsNeeded = Math.ceil(additionalGuests / fixedGuestsPerRoom);
+    console.log("additionalRoomsNeeded", additionalRoomsNeeded);
+    const basePriceHike = basePrice * priceIncreaseDefault * additionalRoomsNeeded;
+    priceHike = basePriceHike;
+    totalPrice += basePriceHike; // Corrected line: Apply the hike only once
+  }
+  const gstAmount = totalPrice * gstRate;
   let finalPrice = totalPrice + gstAmount;
   let offerDiscountMoney;
   const getOffer = await OfferModel.findOne({
@@ -109,16 +118,13 @@ const CalculatePrice = async (
   const priceDetails = {
     totalPrice,
     finalPrice,
+    priceHike,
     gstAmount,
     offerDiscountMoney,
   };
   console.log("priceDetails", priceDetails);
   return priceDetails;
 };
-
-
-
-
 
 exports.ApplyOffer = AsyncerrorHandler(async (req, res, next) => {
   const { BookingId, OfferId } = req.body;
@@ -170,19 +176,33 @@ exports.ApplyOffer = AsyncerrorHandler(async (req, res, next) => {
 
 exports.verifyUserDuringpayment = AsyncerrorHandler(async (req, res, next) => {
   const { name, email, phoneNumber } = req.body;
-  const findUser=await UserModel.findOne({email});
-  if(findUser){
-    return res.status(200).send({"msg":"User is already present",data:findUser})
+  const findUser = await UserModel.findOne({ email });
+  if (findUser) {
+    return res.status(200).send({ success: true, "msg": "User is already present go for login", data: findUser })
   }
-  const password=generateRandomString(6);
-  const registeredUser = new UserModel(name, email, password, phoneNumber);
+  console.log("req", req.body);
+  const password = generateRandomString(6);
+  const hash=await bcrypt.hash(password,10);
+  const registeredUser = new UserModel({ name, email, password:hash, phoneNumber });
   await registeredUser.save();
+  const FindProfile = await ProfileModel.findOne({ 'UserId': registeredUser._id });
+  if (!FindProfile) {
+    const createProfile = new ProfileModel({ UserId: registeredUser._id });
+    await createProfile.save();
+    await UserModel.findOneAndUpdate({ 'UserId': registeredUser._id }, { profileId: createProfile._id }, { new: true })
+  } else {
+    await ProfileModel.findOneAndUpdate({ 'UserId': registeredUser._id }, { UserId: registeredUser._id }, { new: true })
+    await UserModel.findOneAndUpdate({ 'UserId': registeredUser._id }, { profileId: FindProfile._id }, { new: true })
+
+  }
+
   const random = generateRandomNumber(4);
-  const sentOtp = await SendOTPmail(registeredUser, random, res);
+  const sentOtp = await SendOTPmail(registeredUser,password, random, res);
 });
 
 exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
-  const {  method, UserId,HotelId,roomsId,gstAmount,totalPrice,StartingDate,EndDate,appliedOfferId,finalPrice,basePrice,numberOfGuests,numberOfRooms,offerDiscountMoney } = req.body;
+  const { method, priceHike, UserId, HotelId, roomsId, gstAmount, totalPrice, StartingDate, EndDate, appliedOfferId, finalPrice, basePrice, numberOfGuests, numberOfRooms, offerDiscountMoney } = req.body;
+  console.log("req.body", req.body);
   const findUser = await UserModel.findOne({ _id: UserId });
   if (!findUser) {
     return next(new ErrorHandler(401, "Verify yourself for booking"));
@@ -190,12 +210,13 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
   const numberOfNights = Math.ceil(
     (new Date(EndDate) - new Date(StartingDate)) / (1000 * 60 * 60 * 24)
   );
-  const InitiateBooking=new BookingModel({duration:numberOfNights,UserId,HotelId,roomsId,gstAmount,totalPrice,StartingDate,EndDate,appliedOfferId,finalPrice,basePrice,numberOfGuests,numberOfRooms,offerDiscountMoney})
- InitiateBooking.save();
- 
+  const bookingnumber = `booking${generateRandomNumber(6)}`
+  const InitiateBooking = new BookingModel({ priceHike, bookingnumber, duration: numberOfNights, AppliedOfferId: appliedOfferId, UserId, HotelId, roomsId: roomsId, gstAmount, totalPrice, StartingDate, EndDate, appliedOfferId, finalPrice, basePrice, numberOfGuests, numberOfRooms, offerDiscountMoney })
+  InitiateBooking.save();
+
   if (method == "Cash On site") {
     const confirmThePayment = new PaymentModel({
-      BookingId:InitiateBooking._id,
+      BookingId: InitiateBooking._id,
       paymentMode: method,
     });
     await confirmThePayment.save();
@@ -209,9 +230,18 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
       },
       { new: true }
     );
+    console.log("CreateBooking", createBooking);
+    const profiledata = await ProfileModel.findOneAndUpdate(
+      { UserId: UserId }, // Find the profile based on UserId
+      { $push: { 'MyBookings': { BookingId: createBooking?._id } } }, // Push the new BookingId to MyBookings array
+      { new: true }
+    );
+    console.log("CreateBooking", profiledata);
+    const findThisHotelRoom=await RoomModel.findOneAndUpdate({_id:HotelId},{isAvaliable:false},{new:true});
+    console.log("findThisHotelRoom",findThisHotelRoom);
     await sendPaymentSuccessEmail(createBooking, res);
   }
-   else {
+  else {
     const instance = new razorpay({
       key_id: env.RAZOR_PAY_KEY_ID,
       key_secret: env.RAZOR_PAY_KEY_SECRATE,
@@ -224,11 +254,12 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
     console.log(options);
     instance.orders.create(options, async (err, order) => {
       if (err) {
+        console.log("error", error);
         return next(new ErrorHandler(400, "Server Invalid"));
       }
       try {
         const InitiatePayment = new PaymentModel({
-          BookingId:InitiateBooking?._id,
+          BookingId: InitiateBooking?._id,
           paymentMode: method,
           razorpay_order_id: order.id,
         });
@@ -238,8 +269,8 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
         return res.status(200).send({
           msg: "Rozer Payment Initiated successfully",
           order,
-          bookingId:InitiateBooking?._id,
-          key: config.RAZOR_PAY_KEY_ID,
+          bookingId: InitiateBooking?._id,
+          razkey: env.RAZOR_PAY_KEY_ID,
         });
       } catch (error) {
         return next(new ErrorHandler(400, `${error.message}`));
@@ -248,23 +279,29 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
   }
 });
 
+
+
+
 exports.paymentVerify = AsyncerrorHandler(async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     // Generate the expected signature
+    console.log("req.body", req.body);
+    console.log("req.params", req.query);
+
     const generated_signature = crypto
-      .createHmac("sha256", config.RAZOR_PAY_KEY_SECRATE)
+      .createHmac("sha256", 'ztRFhmrQCyvqnPI02Q8cm5P0')
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
+    console.log("sign", generated_signature, razorpay_signature);
 
     if (generated_signature === razorpay_signature) {
       // Payment is successful, handle the logic here
       // Update payment status to 1
       const payment_date = new Date();
-      const paymentInfoUpdate = await PaymentModel.findByIdAndUpdate(
-        { _id: req.query.BookingId },
+      const paymentInfoUpdate = await PaymentModel.findOneAndUpdate(
+        { BookingId: req.query.BookingId }, // Filter using BookingId
         {
           payment_status: true,
           razorpay_signature,
@@ -275,15 +312,25 @@ exports.paymentVerify = AsyncerrorHandler(async (req, res) => {
         },
         { new: true }
       );
-      console.log("bookinginfover", bookingInfo);
+      console.log("paymentInfoUpdate", paymentInfoUpdate);
+
       const updateBooking = await BookingModel.findByIdAndUpdate(
-        { _id: BookingId },
+        req.query.BookingId, // Pass just the _id value
         {
           paymentId: paymentInfoUpdate._id,
           isBooked: true,
         },
         { new: true }
       );
+      console.log("updateBooking", updateBooking);
+
+      const profiledata = await ProfileModel.findOneAndUpdate(
+        { UserId: updateBooking?.UserId }, // Find the profile based on UserId
+        { $push: { 'MyBookings': { BookingId: updateBooking?._id } } }, // Push the new BookingId to MyBookings array
+        { new: true }
+      );
+      const UpdateRoom=await RoomModel.findOneAndUpdate({_id:updateBooking?.roomsId},{isAvaliable:false},{new:true});
+      
       await sendPaymentSuccessEmail(updateBooking, res);
     } else {
       res.status(400).send({ message: "Invalid signature" });
@@ -294,3 +341,82 @@ exports.paymentVerify = AsyncerrorHandler(async (req, res) => {
   }
 });
 
+
+exports.GetAllBookings = AsyncerrorHandler(async (req, res, next) => {
+  const getBookings = await BookingModel.find({isCanceled:false}).populate('UserId').populate('HotelId').populate('roomsId').populate('AppliedOfferId').populate('paymentId');;
+  if (!getBookings.length) return next(new ErrorHandler(404, "Bookings does not exist"))
+
+  return res.status(200).send({ msg: "All Bookings dispersed", data: getBookings });
+})
+
+exports.GetUsersBooking = AsyncerrorHandler(async (req, res, next) => {
+  const getBookings = await BookingModel.find({ UserId: req.params.id,isCanceled:false }).populate('UserId').populate('HotelId').populate('roomsId').populate('AppliedOfferId').populate('paymentId');;
+  if (!getBookings.length) return next(new ErrorHandler(404, "Bookings does not exist"))
+  return res.status(200).send({ msg: "All Bookings dispersed", data: getBookings });
+})
+
+exports.UseractiveandpastBooking = AsyncerrorHandler(async (req, res) => {
+  const userId = req.params.id;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Set time to start of day
+  const bookings = await BookingModel.find({ UserId: userId,isCanceled:false }).populate('UserId').populate('HotelId').populate('roomsId').populate('AppliedOfferId').populate('paymentId');
+  if (!bookings.length) {
+    return next(new ErrorHandler(404, "No hotels exist for you"))
+  }
+  const activeBookings = [];
+  const pastBookings = [];
+  bookings.forEach(booking => {
+    const endDate = new Date(booking.EndDate);
+    endDate.setHours(0, 0, 0, 0); // Set time to start of day
+    if (endDate >= today) {
+      activeBookings.push(booking);
+    } else {
+      pastBookings.push(booking);
+    }
+  });
+  const data = {
+    activeBookings, pastBookings
+  }
+  return res.status(200).send({ success: true, msg: "User bookings informations", data });
+})
+
+exports.GetBookingLatest = AsyncerrorHandler(async (req, res, next) => {
+  const today = moment().tz("Asia/Kolkata").startOf('day');
+  const bookings = await BookingModel.find({ UserId: req.params.id })
+  if (!bookings.length) {
+    return res.status(404).send({ error: "Bookings do not exist" });
+  }
+  const todayBookings = await BookingModel.find({
+    createdAt: {
+      $gte: today.toDate(), // Start of today
+      $lt: moment(today).endOf('day').toDate() // End of today
+    }, UserId: req.params.id,isCanceled:false,
+  }).sort({ timestamp: -1 }).populate('UserId').populate('HotelId').populate('roomsId').populate('AppliedOfferId').populate('paymentId');
+
+  // Find bookings created in this month excluding today
+  const thisMonthBookings = await BookingModel.find({
+    createdAt: {
+      $lt: today.toDate() // Before today
+    }, UserId: req.params.id,
+  }).sort({ timestamp: -1 }).populate('UserId').populate('HotelId').populate('roomsId').populate('AppliedOfferId').populate('paymentId');
+
+
+  const data = {
+    todayBookings,
+    thisMonthBookings
+  }
+
+  return res.status(200).send({ success: true, msg: "All Bookings dispersed", data });
+
+
+})
+
+exports.CancelBooking= AsyncerrorHandler(async (req, res, next) => {
+  const {UserId,BookingId}=req.body; 
+  const getBookings = await BookingModel.findOne({UserId,_id:BookingId,isCanceled:false});
+  if (!getBookings) return next(new ErrorHandler(404, "Bookings does not exist"))
+    const UpdateBooking=await BookingModel.findOneAndUpdate({_id:BookingId,UserId},{
+  isCanceled:true,
+  },{new:true});
+  return res.status(200).send({ msg: "your booking has been canceled", data: UpdateBooking });
+})

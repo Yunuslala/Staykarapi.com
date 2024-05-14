@@ -4,15 +4,17 @@ const {ErrorHandler}=require("../utils/Error.Handler");
 const bcrypt=require("bcrypt")
 const jwt=require("jsonwebtoken");
 require('dotenv').config();
-const cloudinary = require("cloudinary").v2;
-const SentMail =require("../utils/SentMail");
 const { uploadMedia } = require("../utils/s3Config");
 const { ProfileModel } = require("../models/Profile.Model");
+const AsyncerrorHandler = require("../middlewares/AsyncerrorHandler");
+const { generateRandomString } = require("../utils/RandomNumber");
+const { SentUserMailPassword } = require("../utils/SentMail");
 
 
 exports.RegisterUser=AsyncErrorHandler(async(req,res,next)=>{
     const  {name,email,password,phoneNumber,role}=req.body;
     const findExisting=await UserModel.findOne({email});
+    console.log("req.body",req.body);
     if(findExisting){
         return res.status(200).send({success:true,msg:"User already exist go for login",data:findExisting})
     }
@@ -30,8 +32,29 @@ exports.RegisterUser=AsyncErrorHandler(async(req,res,next)=>{
     })
 })
 
+exports.loginWithGoogle=AsyncErrorHandler(async(req,res,next)=>{
+    const  {name,email,image}=req.body;
+    const findExisting=await UserModel.findOne({email});
+    console.log("req.body",req.body);
+    if(findExisting){
+        return res.status(200).send({success:true,msg:"User already exist go for login",data:findExisting})
+    }
+    const password=generateRandomString(6);
+    const hash=await bcrypt.hash(password,10);
+    const saveUser=new UserModel({
+        name,email,password:hash,avatar:{imageUrl:image},
+    })
+    await saveUser.save();
+    const createProfile=new ProfileModel({UserId:saveUser._id});
+    await createProfile.save();
+    await SentUserMailPassword(saveUser,password);
+    return res.status(201).send({
+        success:true,
+        msg:"User has been registered sucessfully",
+        data:saveUser
+    })
 
-
+})
 exports.loginUser=AsyncErrorHandler(async(req,res,next)=>{
     const  {email,password}=req.body;
     if(!email || !password){
@@ -59,28 +82,28 @@ exports.loginUser=AsyncErrorHandler(async(req,res,next)=>{
 
 
 exports.forgotPassword=AsyncErrorHandler(async(req,res,next)=>{
-    const finduser=await UserModel.findOne({email:req.body.email});
-    if(!finduser){
-        return next(new ErrorHandler(404,"Email is not registered go for signup first"))
-    }
-    const Expirestoken=jwt.sign({email:finduser.email},"resetPass",{expiresIn:'5m'});
-    const resetTokenUrl=`https://my-e-commerce-frontend-o1fsmoezk-yunuslala.vercel.app/reset/password/${Expirestoken}`;
+//     const finduser=await UserModel.findOne({email:req.body.email});
+//     if(!finduser){
+//         return next(new ErrorHandler(404,"Email is not registered go for signup first"))
+//     }
+//     const Expirestoken=jwt.sign({email:finduser.email},"resetPass",{expiresIn:'5m'});
+//     const resetTokenUrl=`https://my-e-commerce-frontend-o1fsmoezk-yunuslala.vercel.app/reset/password/${Expirestoken}`;
 
-    const message=`Your password reset token is It is only valid for 5 minute: <br/><br/><a href="${resetTokenUrl}">${resetTokenUrl}</a><br/><br/>If you have not requested this email, please ignore it.`;
-    try {
-        await SentMail({
-          email: finduser.email,
-          subject: `Ecommerce Password Recovery`,
-          message,
-        });
+//     const message=`Your password reset token is It is only valid for 5 minute: <br/><br/><a href="${resetTokenUrl}">${resetTokenUrl}</a><br/><br/>If you have not requested this email, please ignore it.`;
+//     try {
+//         await SentMail({
+//           email: finduser.email,
+//           subject: `Ecommerce Password Recovery`,
+//           message,
+//         });
 
-        res.status(200).json({
-          success: true,
-          message: `Email sent to ${finduser.email} successfully`,
-        });
-      } catch (error) {
-        return next(new ErrorHander( 500,error.message));
-      }
+//         res.status(200).json({
+//           success: true,
+//           message: `Email sent to ${finduser.email} successfully`,
+//         });
+//       } catch (error) {
+//         return next(new ErrorHander( 500,error.message));
+//       }
 })
 
 
@@ -171,15 +194,15 @@ exports.updateProfile=AsyncErrorHandler(async(req,res,next)=>{
 
 exports.getAllUser=AsyncErrorHandler(async(req,res,next)=>{
     let {role}=req.body;
-    if(role!="admin"){
-        return next(new ErrorHandler(401,"you are not authorize for these routes"))
-    }
+    // if(role!="admin"){
+    //     return next(new ErrorHandler(401,"you are not authorize for these routes"))
+    // }
     const data=await UserModel.find();
     if(!data.length){
         return next(new ErrorHandler(404,"users does not exist"));
     }
     return res.status(200).send({
-        sucess:true,
+        success:true,
         data,
         msg:"All User dispersed"
     })
@@ -196,7 +219,7 @@ exports.getSingleUser=AsyncErrorHandler(async(req,res,next)=>{
         return next(new ErrorHandler(404,"user does not exist"))
     }
     return res.status(200).send({
-        sucess:true,
+        success:true,
         data:finduser,
         msg:"single user dispersed"
     })
@@ -223,17 +246,18 @@ exports.updateUserRole=AsyncErrorHandler(async(req,res,next)=>{
 
 exports.deleteUser=AsyncErrorHandler(async(req,res,next)=>{
     let {role}=req.body;
-    if(role!="admin"){
-        return next(new ErrorHandler(401,"you are not authorize for these routes"))
-    }
+    // if(role!="admin"){
+    //     return next(new ErrorHandler(401,"you are not authorize for these routes"))
+    // }
     const finduser=await UserModel.findOne({_id:req.params.id})
     if(!finduser){
         return next(new ErrorHandler(404,"user does not exist"))
     }
-    const deleteImage=await cloudinary.uploader.destroy(finduser.avatar);
+    // const deleteImage=await cloudinary.uploader.destroy(finduser.avatar);
     const  updateRole=await UserModel.findByIdAndDelete({_id:req.params.id});
+    await ProfileModel.findOneAndDelete({UserId:req.params.id})
     return res.status(200).send({
-        sucess:true,
+        success:true,
         msg:"user is deleted sucessfully",
         data:finduser,
     })
@@ -247,7 +271,7 @@ exports.MyProfile=AsyncErrorHandler(async(req,res,next)=>{
         return next(new ErrorHandler(404,"user does not exist"))
     }
     return res.status(200).send({
-        sucess:true,
+        success:true,
         msg:"user is fetched sucessfully",
         data:GetMe,
     })

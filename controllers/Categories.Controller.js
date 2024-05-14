@@ -1,6 +1,5 @@
 const AsyncerrorHandler = require("../middlewares/AsyncerrorHandler");
 const { CategoryModel } = require("../models/Categories.Model");
-
 const { ErrorHandler } = require("../utils/Error.Handler");
 
 

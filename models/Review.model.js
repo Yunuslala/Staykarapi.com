@@ -3,7 +3,7 @@ const validator = require('validator');
 const ReviewSchema=mongoose.Schema({
    UserId: {
     type: mongoose.Types.ObjectId,
-    ref:"user"
+    ref:"User"
       },
       HotelId: {
         type: mongoose.Types.ObjectId,
@@ -18,9 +18,12 @@ const ReviewSchema=mongoose.Schema({
         required:true
     },
     ReviewImages:[{
-        url:{
-            type:String,
-        }
+      imageUrl: {
+        type: String
+      },
+      Key: {
+        type: String,
+      }
 
     }],
       createdAt: {

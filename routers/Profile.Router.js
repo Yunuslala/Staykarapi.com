@@ -5,11 +5,16 @@ const {Authentication}=require("../middlewares/Authenitcation");
 
 const { upload } = require("../utils/multer");
 
-const { AddBlogFavourites, AddHotelFavourites, ProfileDetails } = require("../controllers/UserProfile.Controller");
+const { AddBlogFavourites, AddHotelFavourites, ProfileDetails, getAllProfiles, deleteProfile, GetSingleProfile } = require("../controllers/UserProfile.Controller");
 
 ProfileRouter.route("/User/ProfileDetails").post(ProfileDetails);
 ProfileRouter.route("/User/AddToFavouriteBlog/:id").post(AddBlogFavourites);
 ProfileRouter.route("/User/AddToFavouriteHotels/:id").post(AddHotelFavourites);
+ProfileRouter.route("/User/GetAllProfiles").get(getAllProfiles);
+ProfileRouter.route("/User/GetingleProfile/:id").delete(deleteProfile);
+ProfileRouter.route("/User/GetingleProfile/:id").get(GetSingleProfile);
+
+
 
 
 

@@ -6,7 +6,6 @@ const UserSchema=mongoose.Schema({
         required: [true, "Please Enter Your Name"],
         maxLength: [30, "Name cannot exceed 30 characters"],
         minLength: [4, "Name should have more than 4 characters"],
-        
       },
       email: {
         type: String,
@@ -18,11 +17,10 @@ const UserSchema=mongoose.Schema({
         type: String,
         required: [true, "Please Enter Your Password"],
         minlength: [6, "Password should be greater than 8 characters"],
-        select: false,
+      
       },
       phoneNumber: {
         type: String,
-        required: true,
         unique:true,
         validate: {
           validator: function(v) {
@@ -48,6 +46,14 @@ const UserSchema=mongoose.Schema({
         type: Date,
         default: Date.now,
       },
+      isDeleted:{
+        type:Boolean,
+        default:false
+      },
+      profileId:{
+        type:mongoose.Types.ObjectId,
+        ref:"Profile"
+      }
 })
 
 const UserModel=mongoose.model('User',UserSchema);

@@ -47,12 +47,19 @@ exports.UpdateBlogs=AsyncerrorHandler(async(req,res,next)=>{
 
 
  exports.GetAllBlogs=AsyncerrorHandler(async(req,res,next)=>{
- const findBlogs=await BlogsModel.find();
+ const findBlogs=await BlogsModel.find().populate("UserId");
  if(!findBlogs.length){
   return next(new ErrorHandler(404,"Blogs is empty does not exist"))
  }
   return res.status(201).send({success:true,msg:"All Blogss",data:findBlogs})
 })
+exports.GetSingleBlog=AsyncerrorHandler(async(req,res,next)=>{
+    const findBlogs=await BlogsModel.find({_id:req.params.idd}).populate("UserId");
+    if(!findBlogs){
+     return next(new ErrorHandler(404,"Blogs is empty does not exist"))
+    }
+     return res.status(201).send({success:true,msg:"All Blogss",data:findBlogs})
+   })
 
 exports.DeleteBlogs=AsyncerrorHandler(async(req,res,next)=>{
   const {role,UserId}=req.body;

@@ -4,18 +4,28 @@ const moment = require("moment-timezone");
 const BookingSchema=mongoose.Schema({
    UserId:{
         type:mongoose.Types.ObjectId,
-        ref:'user'
+        ref:'User'
     },
    
     HotelId:{
         type:mongoose.Types.ObjectId,
         ref:'Hotel'
     },
+    bookingnumber:{
+        type:String
+    },
+    isCanceled:{
+        type:Boolean,
+        default:false
+    },
     roomsId:{
         type:mongoose.Types.ObjectId,
         ref:'Room'
     },
     duration:{
+        type:String
+    },
+    priceHike:{
         type:String
     },
     gstAmount:{

@@ -189,12 +189,15 @@ exports.GetAllHotel = async (req, res, next) => {
 
     // Construct the query to fetch hotels
     let query = HotelModel.find(filterCriteria)
-      .populate("hotelRooms.roomsId")
       .populate("Categories.CategoryId")
       .populate('Reviews.ReviewId')
       .populate('LocationId')
       .populate('Ameneties.amenityId')
-      .populate('offers.offerId');
+      .populate('offers.offerId')
+      .populate({
+        path: "hotelRooms.roomsId",
+        match: { isAvaliable: true }
+      });
 
     // If sorting parameter is provided
     if (sort!=undefined) {
@@ -227,6 +230,8 @@ exports.GetAllHotel = async (req, res, next) => {
 
     let highestPrice = 0;
     let lowestPrice = Infinity;
+    console.log("allhotels",AllHotel[0]);
+
     console.log("allhotels",AllHotel[0].hotelRooms);
     // Calculate highest and lowest prices
     AllHotel.forEach(hotel => {
@@ -255,8 +260,8 @@ exports.GetAllHotel = async (req, res, next) => {
 
 exports.searchHotel = async (req, res, next) => {
   try {
-    const { location, from, to, persons, rooms } = req.body;
-
+    const { location, from, to, persons, rooms,priceRange,Category } = req.body;
+    // paramdate,paramCategory,parmalocation,paramPriceRange,paramperson,paramroom
     // Search hotels based on location
     const locations = await LocationsModel.find({ 'location': location });
     const hotels=await HotelModel.find({LocationId:locations?._id});
@@ -308,6 +313,7 @@ async function getAmenityIds(amenities) {
 
 exports.addReview=AsyncerrorHandler(async(req,res,next)=>{
     const {UserId,HotelId,text,ratings}=req.body;
+    console.log("req.body",req.body);
     let fileUrls = [];
     if (req.files && req.files.length > 0) {
       // Map the array of files to an array of promises returned by uploadMedia
@@ -323,9 +329,11 @@ exports.addReview=AsyncerrorHandler(async(req,res,next)=>{
       const uploadedFiles = await Promise.all(uploadPromises);
       fileUrls = uploadedFiles.filter(Boolean);
     }
+    console.log("fileUrls",fileUrls)
     const createReview=new ReviewModel({
       UserId,HotelId,text,ratings,ReviewImages:fileUrls
     })
+    createReview.save();
     const findHotelReviews = await ReviewModel.find({
         HotelId
       });
@@ -349,17 +357,26 @@ exports.addReview=AsyncerrorHandler(async(req,res,next)=>{
 })
 
 exports.getSingleHotel = AsyncerrorHandler(async (req, res, next) => {
-  const Hotelname = req.params.id;
+  const Hotelname = req.params.HotelName;
   const roomtype = req.query.type;
   
   try {
     const singleHotel = await HotelModel.findOne({ Hotelname })
-      .populate('hotelRooms.roomsId')
+    .populate({
+      path: "hotelRooms.roomsId",
+      match: { isAvaliable: true }
+    })
       .populate('Categories.CategoryId')
       .populate('Reviews.ReviewId')
       .populate('LocationId')
       .populate('offers.offerId')
       .populate('Ameneties.amenityId')
+      .populate({
+        path: 'Reviews.ReviewId',
+        populate: {
+          path: 'UserId', // Populate UserId within each review
+        },
+      })
       .exec();
 
     if (!singleHotel) {
@@ -397,7 +414,52 @@ exports.getSingleHotel = AsyncerrorHandler(async (req, res, next) => {
 });
 
 
+exports.getSingleHotelReviews=AsyncerrorHandler(async (req, res, next) => {
+ 
+    const singleHotel = await HotelModel.findOne({ 
+      _id: req.params.id,
+     })
+      .populate('hotelRooms.roomsId')
+      .populate('Categories.CategoryId')
+      .populate('Reviews.ReviewId')
+      .populate('LocationId')
+      .populate('offers.offerId')
+      .populate('Ameneties.amenityId')
+      .populate({
+        path: 'Reviews.ReviewId',
+        populate: {
+          path: 'UserId', // Populate UserId within each review
+        },
+      })
+      .exec();
 
+    if (!singleHotel) {
+      return next(new ErrorHandler(404, "Hotel not found"));
+    }
+
+    // Filter rooms by roomtype if specified
+
+   return res.status(200).json({
+      success: true,
+      msg: "Single Hotel reviews dispersed",
+      data: singleHotel,
+    });
+ 
+});
+exports.GetAllReview=AsyncerrorHandler(async (req, res, next) => {
+    const singleHotel = await ReviewModel.find()
+      .populate('HotelId')
+      .populate('UserId')
+    if (!singleHotel.length) {
+      return next(new ErrorHandler(404, "Hotel not found"));
+    }
+   return res.status(200).json({
+      success: true,
+      msg: "All reviews dispersed",
+      data: singleHotel,
+    });
+ 
+});
 
 exports.DeleteSingleHotel=AsyncerrorHandler(async(req,res,next)=>{
   const Hotelname=req.params.id;
@@ -420,10 +482,134 @@ exports.GetHotelsByLocations=AsyncerrorHandler(async(req,res,next)=>{
   if(!findlocation){
     return next(new ErrorHandler(404,"Locations does not exist"));
   }
-  const getLocationHotels=await HotelModel.find({LocationId:findlocation._id});
+  const getLocationHotels=await HotelModel.find({LocationId:findlocation._id}).populate({
+    path: "hotelRooms.roomsId",
+    match: { isAvaliable: true }
+  })
+    .populate('Categories.CategoryId')
+    .populate('Reviews.ReviewId')
+    .populate('LocationId')
+    .populate('offers.offerId')
+    .populate('Ameneties.amenityId')
+    .populate({
+      path: 'Reviews.ReviewId',
+      populate: {
+        path: 'UserId', // Populate UserId within each review
+      },
+    });
   if(!getLocationHotels.length){
     return next(new ErrorHandler(404,"for this Location hotels does not exist"));
   }
   return res.status(200).send({success:true,msg:`available hotels for ${Locations}`})
 })
 
+exports.GetHotelreviewpersentage=AsyncerrorHandler(async(req,res,next)=>{
+  const Hotelname = req.params.HotelName;
+  const roomtype = req.query.type;
+    const singleHotel = await HotelModel.findOne({ Hotelname })
+      .populate('hotelRooms.roomsId')
+      .populate('Categories.CategoryId')
+      .populate('Reviews.ReviewId')
+      .populate('LocationId')
+      .populate('offers.offerId')
+      .populate('Ameneties.amenityId')
+      .populate({
+        path: 'Reviews.ReviewId',
+        populate: {
+          path: 'UserId', // Populate UserId within each review
+        },
+      })
+      .exec();
+
+    if (!singleHotel) {
+      return next(new ErrorHandler(404, "Hotel not found"));
+    }
+
+    // Filter rooms by roomtype if specified
+    console.log("roomtype",roomtype);
+    if (roomtype) {
+      // Filter rooms by roomtype if specified
+    console.log("roomtypeagain",roomtype);
+
+      singleHotel.hotelRooms = singleHotel.hotelRooms.filter((room) => {
+        return room.roomsId.roomsType === roomtype;
+      });
+    
+      // Check if there are no rooms matching the specified type
+      if (singleHotel.hotelRooms.length === 0) {
+        singleHotel.hotelRooms = []; // Set hotelRooms to an empty array
+      }
+    }else{
+      singleHotel.hotelRooms = []; 
+    }
+    const allreviews=singleHotel.Reviews;
+
+   const data=await calcualtePersentageOfReviews(allreviews)
+    return res.status(200).send({success:true,msg:"All persentage of ratings",data})
+})
+
+function calculatePercentage(count, total) {
+  return ((count / total) * 100).toFixed(2);
+}
+const calcualtePersentageOfReviews=async(reviews)=>{
+ console.log("reviews",reviews)
+
+// Function to calculate percentage
+
+
+// Initialize count for each rating
+let countRating1 = 0;
+let countRating2 = 0;
+let countRating3 = 0;
+let countRating4 = 0;
+let countRating5 = 0;
+
+// Iterate over reviews to count occurrences of each rating
+reviews.forEach(review => {
+    const rating = review.ReviewId?.ratings;
+    switch (rating) {
+        case 1:
+            countRating1++;
+            break;
+        case 2:
+            countRating2++;
+            break;
+        case 3:
+            countRating3++;
+            break;
+        case 4:
+            countRating4++;
+            break;
+        case 5:
+            countRating5++;
+            break;
+        default:
+            // Handle unexpected ratings
+            break;
+    }
+});
+
+// Calculate total number of reviews
+const totalReviews = reviews.length;
+
+// Calculate percentage for each rating
+const percentageRating1 = calculatePercentage(countRating1, totalReviews);
+const percentageRating2 = calculatePercentage(countRating2, totalReviews);
+const percentageRating3 = calculatePercentage(countRating3, totalReviews);
+const percentageRating4 = calculatePercentage(countRating4, totalReviews);
+const percentageRating5 = calculatePercentage(countRating5, totalReviews);
+
+// Output the results
+console.log(`Percentage of Rating 1: ${percentageRating1}%`);
+console.log(`Percentage of Rating 2: ${percentageRating2}%`);
+console.log(`Percentage of Rating 3: ${percentageRating3}%`);
+console.log(`Percentage of Rating 4: ${percentageRating4}%`);
+console.log(`Percentage of Rating 5: ${percentageRating5}%`);
+return {
+  percentageRating1,
+  percentageRating2,
+  percentageRating3,
+  percentageRating4,
+  percentageRating5
+}
+}

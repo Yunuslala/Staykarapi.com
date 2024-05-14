@@ -12,7 +12,10 @@ const { CategoryRouter } = require('./routers/Categories.Router');
 const { LocationRouter } = require('./routers/Locations.Router');
 const { OffersRouter } = require('./routers/Offer.Router');
 const { BookingRouter } = require('./routers/Booking.Router');
-
+const { AddingPropertyRouter } = require('./routers/AddingProperty.Router');
+const { QueryRouter } = require('./routers/Query.Router');
+const { ScheduleRoomsAvailable } = require('./utils/RandomNumber');
+require('dotenv').config()
 
 process.on("uncaughtException",(err)=>{
     console.log(`Error: ${err.message}`)
@@ -22,7 +25,7 @@ process.on("uncaughtException",(err)=>{
 // app.use(express.static('public'));
 app.use(express.json());
 app.use(cors());
-
+ScheduleRoomsAvailable();
 app.use('/api/v1',UserRouter);
 app.use('/api/v1',ProfileRouter);
 app.use('/api/v1',HotelsRouter);
@@ -32,6 +35,11 @@ app.use('/api/v1',CategoryRouter);
 app.use('/api/v1',LocationRouter);
 app.use('/api/v1',OffersRouter);
 app.use('/api/v1',BookingRouter);
+app.use('/api/v1',AddingPropertyRouter);
+app.use('/api/v1',QueryRouter);
+
+
+
 
 
 

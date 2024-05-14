@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-
+const cron = require('node-cron');
 
 function generateRandomNumber(length) {
 
@@ -33,8 +33,43 @@ const formatDate = (dateString) => {
     const options = { hour: "numeric", minute: "numeric" };
     return date.toLocaleTimeString("en-US", options);
   };
+
+
+// Schedule the cron job
+const ScheduleRoomsAvailable=async()=>{
+    console.log("cron job called")
+    cron.schedule('0 10 * * *', async () => {
+        try {
+          // Retrieve the booking information from the database
+          const booking = await BookingModel.findOne({ EndDate: { $lte: new Date() } }).populate('HotelId');
+          
+          if (!booking) {
+            console.log("No active bookings found.");
+            return;
+          }
+      
+          // Retrieve the HotelId from the booking
+          const HotelId = booking.HotelId;
+      
+          // Update the room availability for the hotel
+          const findThisHotelRoom = await RoomModel.updateMany(
+            { HotelId: HotelId },
+            { isAvailable: true }
+          );
+      
+          console.log("Room availability updated for hotel:", HotelId);
+        } catch (error) {
+          console.error("Error updating room availability:", error);
+        }
+      }, {
+        scheduled: true,
+        timezone: 'Asia/Kolkata' // Set your timezone
+      });
+}
+
+
 // Example usage:
 
 module.exports={
-    generateRandomNumber,generateRandomString,formatDate,formatTime
+    ScheduleRoomsAvailable,generateRandomNumber,generateRandomString,formatDate,formatTime
 }

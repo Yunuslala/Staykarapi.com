@@ -20,7 +20,7 @@ const RoomSchema=mongoose.Schema({
       },
       isAvaliable:{
         type:Boolean,
-        default:false,
+        default:true,
       },
     roomImages:[{
       imageUrl: {

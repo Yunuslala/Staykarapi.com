@@ -4,7 +4,7 @@ const BlogsSchema=mongoose.Schema({
    UserId:{
         type:mongoose.Types.ObjectId,
         required:true,
-        ref:'user'
+        ref:'User'
     },
     title:{
         type:String,

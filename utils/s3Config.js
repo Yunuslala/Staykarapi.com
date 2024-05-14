@@ -14,17 +14,29 @@ const awsConfig = {
   const PdfBucket = config.BUCKET2;
   const S3 = new AWS.S3(awsConfig);
   
-  const uploadInvoiceToS3 = async (pdfBuffer, filename) => {
-    const uploadParams = {
-      Bucket: PdfBucket,
-      Key: filename,
-      Body: pdfBuffer,
-      ContentType: "application/pdf", // Set the content type
-    };
-  
-    const uploadResult = await S3.upload(uploadParams).promise();
-    console.log(uploadResult);
-    return uploadResult.Location; // Return the S3 URL of the uploaded PDF
+  const uploadInvoiceToS3 = async (pdfBuffer, filename,clear=false) => {
+    // const uploadParams = {
+    //   Bucket: PdfBucket,
+    //   Key: filename,
+    //   CopySource: pdfBuffer,
+    //   ContentType: "application/pdf", // Set the content type
+    // };
+    fs.readFile(pdfBuffer, (err, data,clear=false) => {
+      if (err) console.log(err);
+      const params = {
+          Bucket:  PdfBucket, // pass your bucket name
+          Key: filename, // file will be saved as testBucket/contacts.csv
+          Body: data
+      };
+S3.upload(params, function (s3Err, data) {
+        if (s3Err) throw s3Err
+       
+        console.log(`File uploaded successfully at ${data.Location}`)
+    });
+});
+    // const uploadResult = await S3.upload(uploadParams).promise();
+    // console.log(uploadResult);
+    // return uploadResult.Location; // Return the S3 URL of the uploaded PDF
   };
 
 

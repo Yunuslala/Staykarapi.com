@@ -4,7 +4,7 @@ const validator = require("validator");
 const ProfileSchema = mongoose.Schema({
   UserId: {
     type: mongoose.Types.ObjectId,
-    ref: "user",
+    ref: "User",
     required: [true, "Please Enter userId"],
   },
   FavouriteBlogs: [
@@ -15,6 +15,10 @@ const ProfileSchema = mongoose.Schema({
       },
     },
   ],
+  isDeleted:{
+    type:Boolean,
+    default:false
+  },
   FavouriteHotels: [
     {
       HotelId: {

@@ -10,14 +10,18 @@
     @page {
       size: A4;
       margin: 0;
-      padding:20px;
+      padding: 20px;
     }
 
     body {
       font-family: Arial, sans-serif;
-      margin: 0;
+      margin:auto;
+      margin-top: 10%;
       padding: 10px;
       font-size: 14px;
+      width: 90%;
+    
+
     }
 
     .invoice-container {
@@ -50,6 +54,9 @@
     .logo>img {
       width: 20vmax;
     }
+    .totalmoneydiv{
+      margin-right: 20px;
+    }
 
     .header h1 {
       margin: 0;
@@ -81,19 +88,14 @@
       margin: auto;
       justify-content: space-between;
       padding: 20px 0;
-
-
     }
 
     .PaymentDeailsDiv {
       display: flex;
       width: 50%;
       margin: auto;
-
       justify-content: space-evenly;
       align-items: flex-start;
-
-
     }
 
     .PaymentDeailsDiv>div {
@@ -102,7 +104,6 @@
       width: 90%;
       align-items: flex-start;
       justify-content: flex-start;
-
     }
 
     .PaymentDeailsDiv>div>h1 {
@@ -152,35 +153,31 @@
       <img src="https://staykr.com/static/media/Union.7389e099.png" alt="Logo" />
     </div>
     <div>
-      <h1>The {{ hotel_nameA }} by Staykr</h1>
+      <h1>The <%= templateobj?.hotel_name %> by Staykr</h1>
       <h4> STAYKR ROOM SERVICES LLP</h4>
       <h4><strong> Ph.no.</strong>9599085990</h4>
       <h6>1ST FLOOR, HOUSE NO-1037,<br> GURGAON, SECTOR 22-
         B, Gurugram, <br>Gurugram, Haryana, 122001</h6>
-        <h4>GST Number : 06AEVFS8776E1Z6</h4>
-
+      <h4>GST Number : 06AEVFS8776E1Z6</h4>
     </div>
   </div>
   <div class="line"></div>
   <div class="invoice-container">
     <div>
-      <p><strong>Guest Details :</strong>{{ guest_name }}</p>
-      <p style="color: blue;">{{ guest_email }}</p>
-      <p style="color: blue;">{{ guest_phone }}</p>
-
-      <p><strong>BILL FROM :</strong>{{ hotel_name }}</p>
-      <p style="color: blue;">{{ hotel_address }}</p>
-      <p style="color: blue;">{{ contact_email }}</p>
+      <p><strong>Guest Details :</strong><%= templateobj?.guest_name %></p>
+      <p style="color: blue;"><%= templateobj?.guest_email %></p>
+      <p style="color: blue;"><%= templateobj?.guest_phone %></p>
+      <p><strong>BILL FROM :</strong><%= templateobj?.hotel_name %></p>
+      <p style="color: blue;"><%= templateobj?.hotel_address %></p>
+      <p style="color: blue;"><%= templateobj?.contact_email %></p>
     </div>
-
     <div>
-      <p><strong>Booking No.:</strong>{{ booking_id }} </p>
-      <p><strong>Booking Date.:</strong> {{ Booking_date }}</p>
-      <p><strong>CheckInDate.:</strong> {{ check_in_date }}</p>
-      <p><strong>CheckoutDate.:</strong> {{ check_out_date }}</p>
-      <p><strong>Rooms.:</strong> {{ totalRooms }}</p>
-      <p><strong>Guests.:</strong> {{ totalGuests }}</p>
-
+      <p><strong>Booking No.:</strong><%= templateobj?.booking_id %> </p>
+      <p><strong>Booking Date.:</strong> <%= templateobj?.Booking_date %></p>
+      <p><strong>CheckInDate.:</strong> <%= templateobj?.check_in_date %></p>
+      <p><strong>CheckoutDate.:</strong> <%= templateobj?.check_out_date %></p>
+      <p><strong>Rooms.:</strong> <%= templateobj?.totalRooms %></p>
+      <p><strong>Guests.:</strong> <%= templateobj?.totalGuests %></p>
     </div>
   </div>
   <div class="line"></div>
@@ -196,10 +193,23 @@
     </thead>
     <tbody>
       <tr>
-        <td style="color: blue;">{{ totalRoomsA }}</td>
-        <td style="color: blue;">{{ roomType }}</td>
-        <td style="color: blue;">{{ basePrice }}</td>
-        <td style="color: blue;">{{ totalRoomPrice }}</td>
+        <td style="color: blue;"><%= templateobj?.totalRooms %></td>
+        <td style="color: blue;"><%= templateobj?.roomType %></td>
+        <td style="color: blue;"><%= templateobj?.basePrice %></td>
+        <td style="color: blue;">
+          <% 
+            // Convert basePrice and totalRooms to numbers for calculation
+            const basePriceNum = parseFloat(templateobj?.basePrice);
+            const totalRoomsNum = parseInt(templateobj?.totalRooms);
+        
+            // Calculate the base price multiplied by total rooms
+            const basePriceTotal = basePriceNum * totalRoomsNum; 
+            
+            // Initialize total price
+            let totalPrice = basePriceTotal;
+          %>
+          <%=templateobj?.basePrice %> * <%=templateobj?.totalRooms %> : <%=totalPrice%>
+        </td>
       </tr>
     </tbody>
   </table>
@@ -207,10 +217,20 @@
   <div class="subtotal">
     <div class="AuthoritySign">
     </div>
-    <div>
-      <p><strong>Subtotal:</strong> {{ subtotal }}</p>
-      <p><strong>GstTax:<strong>{{ subtotalAg }}*10%: </strong> </strong> {{ tax }}</p>
-      <p><strong>Grand Total:</strong> {{ grandTotal }}</p>
+    <div className="totalmoneydiv">
+      <% if (templateobj?.priceHike!='0') { %>
+        <p><strong>Extra Person Hike 30%:<strong><%=templateobj?.priceHike %> </strong></strong></p>
+      <% } %>
+
+      <% 
+      // Calculate 12% of totalPrice
+      const gstTax = totalPrice * 0.12;
+    %>
+      <p><strong>GstTax:<strong><%=totalPrice %>*12%: </strong> </strong> <%=gstTax %></p>
+      <% if (templateobj?.discountprice) { %>
+        <p><strong>Discount:<strong>-<%=templateobj?.discountprice %> </strong></strong></p>
+      <% } %>
+      <p><strong>Grand Total:</strong> <%=templateobj?.grandTotal %></p>
     </div>
   </div>
   <div class="line"></div>
@@ -218,11 +238,11 @@
     <div class="PaymentDeailsDiv">
       <div>
         <h1>Total Payment</h1>
-        <p>{{ grandTotalA }}</p>
+        <p><%=templateobj?.grandTotal %></p>
         <h1>Payment Method</h1>
-        <p> {{ payment_method }}</p>
+        <p> <%=templateobj?.payment_method %></p>
         <h1>Payment Status</h1>
-        <p>{{status}}</p>
+        <p><%=templateobj?.status %></p>
       </div>
     </div>
     <div class="GuestSign">
@@ -252,7 +272,6 @@
     <p>You can contact our customer support team at any time by visiting our website: <a
         href="https://staykr.com/">https://staykr.com/</a>. Our dedicated team is here to assist you with any inquiries
       you may have.</p>
-  </div>
   </div>
 </body>
 
