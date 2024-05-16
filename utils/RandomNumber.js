@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const cron = require('node-cron');
+const { BookingModel } = require("../models/Booking.model");
 
 function generateRandomNumber(length) {
 
@@ -40,6 +41,7 @@ const ScheduleRoomsAvailable=async()=>{
     console.log("cron job called")
     cron.schedule('0 10 * * *', async () => {
         try {
+          
           // Retrieve the booking information from the database
           const booking = await BookingModel.findOne({ EndDate: { $lte: new Date() } }).populate('HotelId');
           
