@@ -265,13 +265,7 @@ exports.GetAllHotel = async (req, res, next) => {
     return next(error);
   }
 };
-// date: date,
-// Category:Category,
-// location:location,
-// priceRange:priceRange,
-// personqty:personqty,
-// roomqty:roomqty,
-// roomtype:roomtype
+
 
 exports.searchHotel = AsyncerrorHandler(async (req, res, next) => {
   try {
@@ -352,7 +346,7 @@ exports.searchHotel = AsyncerrorHandler(async (req, res, next) => {
     let findHotels = HotelModel.find(filterCriteria)
       .populate({
         path: 'hotelRooms.roomsId',
-        match: filterCriteria['hotelRooms.roomsId'] ? { _id: { $in: filterCriteria['hotelRooms.roomsId']['$in'] } } : {}
+        match: filterCriteria['hotelRooms.roomsId'] ? { _id: { $in: filterCriteria['hotelRooms.roomsId']['$in'] },isAvaliable: true } : {}
       })
       .populate('Reviews.ReviewId')
       .populate('LocationId')
@@ -360,56 +354,50 @@ exports.searchHotel = AsyncerrorHandler(async (req, res, next) => {
       .populate('offers.offerId')
       .populate('Categories.CategoryId');
     
-    if (sort !== undefined) {
-      let sortOption = {};
+ 
+    
+    const allHotels = await findHotels;
+    
+    allHotels.forEach(hotel => {
+      hotel.hotelRooms = hotel.hotelRooms.filter(room => room.roomsId !== null);
+    });
+    if (sort) {
       switch (sort) {
         case 'priceAsc':
-          sortOption = { 'hotelRooms.roomsId.Price': 1 };
+          allHotels.sort((hotelA, hotelB) => {
+            const minPriceHotelA = Math.min(...hotelA.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : Infinity));
+            const minPriceHotelB = Math.min(...hotelB.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : Infinity));
+            return minPriceHotelA - minPriceHotelB;
+          });
           break;
         case 'priceDesc':
-          sortOption = { 'hotelRooms.roomsId.Price': -1 };
+          allHotels.sort((hotelA, hotelB) => {
+            const maxPriceHotelA = Math.max(...hotelA.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : 0));
+            const maxPriceHotelB = Math.max(...hotelB.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : 0));
+            return maxPriceHotelB - maxPriceHotelA;
+          });
           break;
         case 'ratingAsc':
-          sortOption = { 'Ratings': 1 };
+          allHotels.sort((hotelA, hotelB) => hotelA.Ratings - hotelB.Ratings);
           break;
         case 'ratingDesc':
-          sortOption = { 'Ratings': -1 };
+          allHotels.sort((hotelA, hotelB) => hotelB.Ratings - hotelA.Ratings);
           break;
         default:
           return res.status(400).json({ success: false, msg: "Invalid sorting parameter" });
       }
-      console.log("sorting",sort);
-      console.log("sortoptions",sortOption);
-      findHotels = findHotels.sort(sortOption);
     }
-    
-    const allHotel = await findHotels;
-    
-    allHotel.forEach(hotel => {
-      hotel.hotelRooms = hotel.hotelRooms.filter(room => room.roomsId !== null);
-    });
-    
-    let highestPrice = 0;
-    let lowestPrice = Infinity;
-    allHotel.forEach(hotel => {
-      hotel.hotelRooms.forEach(item => {
-        if (item.roomsId && item.roomsId.Price) {
-          if (item.roomsId.Price > highestPrice) {
-            highestPrice = item.roomsId.Price;
-          }
-          if (item.roomsId.Price < lowestPrice) {
-            lowestPrice = item.roomsId.Price;
-          }
-        }
-      });
-    });
-    
+
+    // Your existing code to filter out rooms without prices...
+
     const hotelData = {
-      data: allHotel,
-      lowestPrice,
-      highestPrice,
-      hotelLength: allHotel.length
+      data: allHotels,
+      lowestPrice: Math.min(...allHotels.map(hotel => Math.min(...hotel.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : Infinity)))),
+      highestPrice: Math.max(...allHotels.map(hotel => Math.max(...hotel.hotelRooms.map(room => room.roomsId ? room.roomsId.Price : 0)))),
+      hotelLength: allHotels.length
     };
+    
+   
     
     if (!allHotel.length) {
       return res.status(200).send({ msg: "Hotels do not exist for this criteria", success: false, data: hotelData });
@@ -589,6 +577,25 @@ exports.DeleteSingleHotel = AsyncerrorHandler(async (req, res, next) => {
   await HotelModel.findByIdAndDelete({ _id: HotelId });
   return res.status(200).send({ success: true, msg: "Hotel is deleted" });
 })
+exports.DeleteSingleHotelRooms = AsyncerrorHandler(async (req, res, next) => {
+  const roomid = req.params.id;
+  const { role } = req.body;
+  if (role != 'admin') {
+    return next(new ErrorHandler(401, "You are not authorised"))
+  }
+  const singleHotel = await RoomModel.findOne({ _id:roomid });
+  if (!singleHotel) {
+    return next(new ErrorHandler(404, "Reviews does not exist for this hotel"))
+  }
+  await HotelModel.findByIdAndUpdate({ _id: singleHotel?.hotelId },{
+    $pull: { hotelRooms:{roomsId:roomid} }
+  },{
+    new:true
+  });
+  await RoomModel.findByIdAndDelete({ _id:roomid });
+
+  return res.status(200).send({ success: true, msg: "Hotel is deleted" });
+})
 
 exports.GetHotelsByLocations = AsyncerrorHandler(async (req, res, next) => {
   const Locations = req.params.id;
@@ -723,7 +730,8 @@ exports.GetSimilarHotel = AsyncerrorHandler(async (req, res, next) => {
       .populate({
         path: 'hotelRooms.roomsId',
         match: {
-          roomsType: roomtype
+          roomsType: roomtype,
+          isAvaliable: true
         }
       })
       .populate('Categories.CategoryId')

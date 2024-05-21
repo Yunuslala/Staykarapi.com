@@ -1,7 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
 const cron = require('node-cron');
 const { BookingModel } = require("../models/Booking.model");
-
+const moment = require("moment-timezone");
+const {RoomModel}=require("../models/RoomModel")
 function generateRandomNumber(length) {
 
     const min = Math.pow(10, length - 1); // Minimum value
@@ -37,37 +38,49 @@ const formatDate = (dateString) => {
 
 
 // Schedule the cron job
-const ScheduleRoomsAvailable=async()=>{
-    console.log("cron job called")
-    cron.schedule('0 10 * * *', async () => {
-        try {
-          
-          // Retrieve the booking information from the database
-          const booking = await BookingModel.findOne({ EndDate: { $lte: new Date() } }).populate('HotelId');
-          
-          if (!booking) {
-            console.log("No active bookings found.");
-            return;
-          }
-      
-          // Retrieve the HotelId from the booking
-          const HotelId = booking.HotelId;
-      
-          // Update the room availability for the hotel
-          const findThisHotelRoom = await RoomModel.updateMany(
-            { HotelId: HotelId },
-            { isAvailable: true }
-          );
-      
-          console.log("Room availability updated for hotel:", HotelId);
-        } catch (error) {
-          console.error("Error updating room availability:", error);
+const ScheduleRoomsAvailable = async () => {
+  console.log("Cron job called");
+
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      const today = moment().startOf('day').toDate();
+      const bookings = await BookingModel.find({ EndDate: { $lte: today }, isCanceled: false }).populate('HotelId');
+
+      if (!bookings.length) {
+        console.log("No active bookings found.");
+        return;
+      }
+
+      let roomsToUpdate = [];
+
+      // Iterate over each booking to collect room IDs
+      bookings.forEach(booking => {
+        if (Array.isArray(booking.roomsId)) {
+          roomsToUpdate = roomsToUpdate.concat(booking.roomsId);
+        } else {
+          roomsToUpdate.push(booking.roomsId);
         }
-      }, {
-        scheduled: true,
-        timezone: 'Asia/Kolkata' // Set your timezone
       });
-}
+
+      // Remove duplicate room IDs, if any
+      roomsToUpdate = [...new Set(roomsToUpdate)];
+
+      // Update room availability for collected room IDs
+      const updateResult = await RoomModel.updateMany(
+        { _id: { $in: roomsToUpdate } },
+        { isAvaliable: true }
+      );
+
+      console.log(`Room availability updated for ${roomsToUpdate.length} rooms.`);
+    } catch (error) {
+      console.error("Error updating room availability:", error);
+    }
+  }, {
+    scheduled: true,
+    timezone: 'Asia/Kolkata' // Set your timezone
+  });
+};
+
 
 
 // Example usage:

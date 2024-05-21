@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
-
 const HotelSchema = mongoose.Schema({
   Hotelname: {
     type: String,

@@ -15,7 +15,7 @@ const { ProfileModel } = require("../models/Profile.Model");
 const moment = require("moment-timezone");
 const bcrypt=require("bcrypt");
 const { RoomModel } = require("../models/RoomModel");
-
+const { v4: uuidv4 } = require('uuid');
 
 exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
   const {
@@ -25,7 +25,6 @@ exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
     checkInDate,
     checkOutDate,
   } = req.body;
-  console.log("body", req.body)
   const priceDetails = await CalculatePrice(
     basePrice,
     numberOfGuests,
@@ -33,7 +32,6 @@ exports.InitiateBookings = AsyncerrorHandler(async (req, res, next) => {
     checkInDate,
     checkOutDate
   );
-  console.log("dates", priceDetails);
   return res
     .status(200)
     .send({ success: true, msg: "Calculated money", data: priceDetails });
@@ -202,7 +200,6 @@ exports.verifyUserDuringpayment = AsyncerrorHandler(async (req, res, next) => {
 
 exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
   const { method, priceHike, UserId, HotelId, roomsId, gstAmount, totalPrice, StartingDate, EndDate, appliedOfferId, finalPrice, basePrice, numberOfGuests, numberOfRooms, offerDiscountMoney } = req.body;
-  console.log("req.body", req.body);
   const findUser = await UserModel.findOne({ _id: UserId });
   if (!findUser) {
     return next(new ErrorHandler(401, "Verify yourself for booking"));
@@ -210,10 +207,39 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
   const numberOfNights = Math.ceil(
     (new Date(EndDate) - new Date(StartingDate)) / (1000 * 60 * 60 * 24)
   );
-  const bookingnumber = `booking${generateRandomNumber(6)}`
+  const startDate = moment(StartingDate).startOf('day');
+  const endDate = moment(EndDate).endOf('day');
+  const existingBookings = await BookingModel.find({
+    roomsId: roomsId,
+    isCanceled: false,
+    $or: [
+      { StartingDate: { $lte: endDate.toDate() }, EndDate: { $gte: startDate.toDate() } },
+      { StartingDate: { $lte: startDate.toDate() }, EndDate: { $gte: endDate.toDate() } }
+    ]
+  });
+  if (existingBookings.length > 0) {
+    return next(new ErrorHandler(400, "The room is already booked for the selected dates"));
+  }
+  const bookingDate = moment().format('YYYYMMDD');
+  const bookingUUID = uuidv4().split('-')[0].toUpperCase();
+  const bookingnumber = `BOOK-${bookingDate}-${bookingUUID}`;
+
   const InitiateBooking = new BookingModel({ priceHike, bookingnumber, duration: numberOfNights, AppliedOfferId: appliedOfferId, UserId, HotelId, roomsId: roomsId, gstAmount, totalPrice, StartingDate, EndDate, appliedOfferId, finalPrice, basePrice, numberOfGuests, numberOfRooms, offerDiscountMoney })
   InitiateBooking.save();
-
+  const currentDateTime = moment();
+  const bookingStartDateTime = moment(StartingDate).startOf('day').add(11, 'hours'); // Check-in time at 11:00 AM
+  const timeDifference = bookingStartDateTime.diff(currentDateTime);
+  if (timeDifference <= 3600000) {
+    // If the booking start date is within the next hour, update room availability immediately
+    await RoomModel.findOneAndUpdate({ _id: InitiateBooking?.roomsId }, { isAvaliable: false }, { new: true });
+    console.log("Room availability updated for room:", InitiateBooking?.roomsId);
+  } else {
+    // Schedule a job to update the room availability one hour before check-in time using setTimeout
+    setTimeout(async () => {
+      await RoomModel.findOneAndUpdate({ _id: InitiateBooking?.roomsId }, { isAvaliable: false }, { new: true });
+      console.log("Scheduled job: Room availability updated for room:", InitiateBooking?.roomsId);
+    }, timeDifference - 3600000); // One hour before check-in
+  }
   if (method == "Cash On site") {
     const confirmThePayment = new PaymentModel({
       BookingId: InitiateBooking._id,
@@ -226,7 +252,6 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
         isBooked: true,
         UserId,
         paymentId: confirmThePayment._id,
-        isBooked: true,
       },
       { new: true }
     );
@@ -238,7 +263,6 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
     );
     console.log("CreateBooking", profiledata);
     const findThisHotelRoom=await RoomModel.findOneAndUpdate({_id:HotelId},{isAvaliable:false},{new:true});
-    console.log("findThisHotelRoom",findThisHotelRoom);
     await sendPaymentSuccessEmail(createBooking, res);
   }
   else {
@@ -285,23 +309,14 @@ exports.ConfirmBooking = AsyncerrorHandler(async (req, res, next) => {
 exports.paymentVerify = AsyncerrorHandler(async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    // Generate the expected signature
-    console.log("req.body", req.body);
-    console.log("req.params", req.query);
-
     const generated_signature = crypto
       .createHmac("sha256", 'ztRFhmrQCyvqnPI02Q8cm5P0')
       .update(razorpay_order_id + "|" + razorpay_payment_id)
       .digest("hex");
-    console.log("sign", generated_signature, razorpay_signature);
-
     if (generated_signature === razorpay_signature) {
-      // Payment is successful, handle the logic here
-      // Update payment status to 1
       const payment_date = new Date();
       const paymentInfoUpdate = await PaymentModel.findOneAndUpdate(
-        { BookingId: req.query.BookingId }, // Filter using BookingId
+        { BookingId: req.query.BookingId },
         {
           payment_status: true,
           razorpay_signature,
@@ -312,32 +327,40 @@ exports.paymentVerify = AsyncerrorHandler(async (req, res) => {
         },
         { new: true }
       );
-      console.log("paymentInfoUpdate", paymentInfoUpdate);
-
       const updateBooking = await BookingModel.findByIdAndUpdate(
-        req.query.BookingId, // Pass just the _id value
+        req.query.BookingId,
         {
           paymentId: paymentInfoUpdate._id,
           isBooked: true,
         },
         { new: true }
       );
-      console.log("updateBooking", updateBooking);
-
       const profiledata = await ProfileModel.findOneAndUpdate(
-        { UserId: updateBooking?.UserId }, // Find the profile based on UserId
-        { $push: { 'MyBookings': { BookingId: updateBooking?._id } } }, // Push the new BookingId to MyBookings array
+        { UserId: updateBooking?.UserId },
+        { $push: { 'MyBookings': { BookingId: updateBooking?._id } } }, 
         { new: true }
       );
-      const UpdateRoom=await RoomModel.findOneAndUpdate({_id:updateBooking?.roomsId},{isAvaliable:false},{new:true});
-      
+      const currentDateTime = moment();
+      const bookingStartDateTime = moment(StartingDate).startOf('day').add(11, 'hours'); // Check-in time at 11:00 AM
+      const timeDifference = bookingStartDateTime.diff(currentDateTime);
+      if (timeDifference <= 3600000) {
+        // If the booking start date is within the next hour, update room availability immediately
+        await RoomModel.findOneAndUpdate({ _id: updateBooking?.roomsId }, { isAvaliable: false }, { new: true });
+        console.log("Room availability updated for room:", updateBooking?.roomsId);
+      } else {
+        // Schedule a job to update the room availability one hour before check-in time using setTimeout
+        setTimeout(async () => {
+          await RoomModel.findOneAndUpdate({ _id: updateBooking?.roomsId }, { isAvaliable: false }, { new: true });
+          console.log("Scheduled job: Room availability updated for room:", updateBooking?.roomsId);
+        }, timeDifference - 3600000); // One hour before check-in
+      }
       await sendPaymentSuccessEmail(updateBooking, res);
     } else {
-      res.status(400).send({ message: "Invalid signature" });
+      return res.status(400).send({ message: "Invalid signature" });
     }
   } catch (error) {
     console.log(error);
-    res.status(500).send({ message: "Internal server error" });
+    return res.status(500).send({ message: "Internal server error" });
   }
 });
 
@@ -418,5 +441,15 @@ exports.CancelBooking= AsyncerrorHandler(async (req, res, next) => {
     const UpdateBooking=await BookingModel.findOneAndUpdate({_id:BookingId,UserId},{
   isCanceled:true,
   },{new:true});
-  return res.status(200).send({ msg: "your booking has been canceled", data: UpdateBooking });
+  if (!UpdateBooking) return next(new ErrorHandler(500, "Error cancelling the booking"));
+
+  // Update the room availability
+  const updateRoom = await RoomModel.findOneAndUpdate(
+    { _id: UpdateBooking.roomsId },
+    { isAvaliable: true },
+    { new: true }
+  );
+
+  if (!updateRoom) return next(new ErrorHandler(500, "Error updating room availability"));
+  await SendBookingCancellationEmails(BookingId,res)
 })
