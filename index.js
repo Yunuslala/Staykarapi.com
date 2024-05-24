@@ -38,6 +38,41 @@ app.use('/api/v1',BookingRouter);
 app.use('/api/v1',AddingPropertyRouter);
 app.use('/api/v1',QueryRouter);
 
+// var accountSid = process.env.TWILIO_ACCOUNT_SID; // Your Account SID from www.twilio.com/console
+// var authToken = process.env.TWILIO_AUTH_TOKEN;   // Your Auth Token from www.twilio.com/console
+ 
+// const client = require('twilio')(accountSid, authToken, { 
+//     lazyLoading: true 
+// });
+
+// // Function to send message to WhatsApp
+// const SendMessage = async (message, senderID) => {
+
+//     try {
+//         await client.messages.create({
+//             to: 'whatsapp:+919696510765',
+//             body: 'hello there !',
+//             from: 'whatsapp:+14155238886',
+//         });
+//         console.log("messages",message)
+//     } catch (error) {
+//         console.log(`Error at sendMessage --> ${error}`);
+//     }
+// };
+
+// SendMessage()
+// app.post('/whatsapp', async (req, res) => {
+
+//     let message = req.body.Body;
+//     let senderID = req.body.From;
+
+//     console.log(message);
+//     console.log(senderID);
+
+//     // Write a function to send message back to WhatsApp
+//     await SendMessage('Hello from the other side.', senderID);
+
+// });
 
 
 

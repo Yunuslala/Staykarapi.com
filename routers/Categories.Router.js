@@ -9,7 +9,7 @@ CategoryRouter.route("/Admin/UpdateCategory").patch(Authentication,UpdateCategor
 CategoryRouter.route("/User/GetALlCategories").get(GetAllCategorys);
 CategoryRouter.route("/Admin/DeleteCategoris").patch(Authentication,DeleteCategorys);
 
-
+ 
 
 module.exports={
     CategoryRouter
